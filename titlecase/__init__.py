@@ -12,6 +12,7 @@ from __future__ import unicode_literals
 import argparse
 import re
 import sys
+import logging
 
 __all__ = ['titlecase']
 __version__ = '0.12.0'
@@ -85,8 +86,19 @@ def titlecase(text, callback=None, small_first_last=True):
     processed = []
     for line in lines:
         all_caps = line.upper() == line
-        words = re.split('[\t ]', line)
         tc_line = []
+
+        # Handle hyphenation without recursion
+        has_hyphens = False
+        hyphen_pos = []
+        if '-' in line:
+            hyphen_pos = [pos for pos, char in enumerate(line) if char == '-']
+            logging.debug('Has hyphens : {}'.format(hyphen_pos))
+            line = line.replace('-', ' ')
+            has_hyphens = True
+
+        words = re.split('[\t ]', line)
+
         for word in words:
             if callback:
                 new_word = callback(word, all_caps=all_caps)
@@ -97,11 +109,13 @@ def titlecase(text, callback=None, small_first_last=True):
                     continue
 
             if all_caps:
+                logging.debug('is all caps')
                 if UC_INITIALS.match(word):
                     tc_line.append(word)
                     continue
 
             if APOS_SECOND.match(word):
+                logging.debug('ASOS second match')
                 if len(word[0]) == 1 and word[0] not in 'aeiouAEIOU':
                     word = word[0].lower() + word[1] + word[2].upper() + word[3:]
                 else:
@@ -111,57 +125,83 @@ def titlecase(text, callback=None, small_first_last=True):
 
             match = MAC_MC.match(word)
             if match:
+                logging.debug('MAC_MC second match')
                 tc_line.append("%s%s" % (match.group(1).capitalize(),
-                                         titlecase(match.group(2),callback,small_first_last)))
+                                         titlecase(match.group(2), callback, small_first_last)))
                 continue
 
             if INLINE_PERIOD.search(word) or (not all_caps and UC_ELSEWHERE.match(word)):
+                logging.debug('INLINE_PEROID match')
                 tc_line.append(word)
                 continue
+
             if SMALL_WORDS.match(word):
+                logging.debug('word : `{}` SMALL_WORDS match (lowercasing)'.format(word))
                 tc_line.append(word.lower())
                 continue
 
             if "/" in word and "//" not in word:
+                logging.debug('SLASHES found (recursing)')
                 slashed = map(
-                    lambda t: titlecase(t,callback,False),
+                    lambda t: titlecase(t, callback, False),
                     word.split('/')
                 )
                 tc_line.append("/".join(slashed))
                 continue
 
-            if '-' in word:
-                hyphenated = map(
-                    lambda t: titlecase(t,callback,small_first_last),
-                    word.split('-')
-                )
-                tc_line.append("-".join(hyphenated))
-                continue
+            # if '-' in word:
+            #     logging.debug('Hyphenated word (recursing).')
+            #     hyphenated = map(
+            #         lambda t: titlecase(t, callback, small_first_last),
+            #         word.split('-')
+            #     )
+            #     tc_line.append("-".join(hyphenated))
+            #     logging.debug('Returning: {}'.format(tc_line))
+            #     continue
 
             if all_caps:
+                logging.debug('ALL_CAPS, lowercasing')
                 word = word.lower()
 
             # Just a normal word that needs to be capitalized
-            tc_line.append(CAPFIRST.sub(lambda m: m.group(0).upper(), word))
+            if not SMALL_WORDS.match(word):
+                logging.debug('word : `{}` not matched, capitalising'.format(word))
+                tc_line.append(CAPFIRST.sub(lambda m: m.group(0).upper(), word))
 
+        logging.debug('TC_LINE: {}'.format(tc_line))
         if small_first_last and tc_line:
             if not isinstance(tc_line[0], Immutable):
+                logging.debug('IS SMALL_FIRST')
                 tc_line[0] = SMALL_FIRST.sub(lambda m: '%s%s' % (
                     m.group(1),
                     m.group(2).capitalize()
                 ), tc_line[0])
+                logging.debug('TC_LINE[0]: {}'.format(tc_line[0]))
 
             if not isinstance(tc_line[-1], Immutable):
+                logging.debug('IS SMALL_LAST')
                 tc_line[-1] = SMALL_LAST.sub(
                     lambda m: m.group(0).capitalize(), tc_line[-1]
                 )
+                logging.debug('TC_LINE[-1]: {}'.format(tc_line[-1]))
 
         result = " ".join(tc_line)
+        logging.debug('RESULT: {}'.format(tc_line))
 
         result = SUBPHRASE.sub(lambda m: '%s%s' % (
             m.group(1),
             m.group(2).capitalize()
         ), result)
+        logging.debug('AFTER SUBPHRASE RESULT: {}'.format(tc_line))
+
+        # Replace hyphens
+        if has_hyphens:
+            logging.debug('Replacing hyphens.')
+            result_list = list(result)
+            for pos in hyphen_pos:
+                result_list[pos] = '-'
+            result = "".join(result_list)
+            logging.debug('AFTER REPLACING : {}'.format(result))
 
         processed.append(result)
 
@@ -178,11 +218,11 @@ def cmd():
     parser = argparse.ArgumentParser()
     in_group = parser.add_mutually_exclusive_group()
     in_group.add_argument('string', nargs='*', default=[],
-            help='String to titlecase')
+                          help='String to titlecase')
     in_group.add_argument('-f', '--input-file',
-            help='File to read from to titlecase')
+                          help='File to read from to titlecase')
     parser.add_argument('-o', '--output-file',
-            help='File to write titlecased output to)')
+                        help='File to write titlecased output to)')
 
     args = parser.parse_args()
 
