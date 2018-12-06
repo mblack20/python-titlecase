@@ -16,7 +16,13 @@ import sys
 __all__ = ['titlecase']
 __version__ = '0.12.0'
 
-SMALL = 'a|an|and|as|at|but|by|en|for|if|in|of|on|or|the|to|v\.?|via|vs\.?'
+SMALL = (
+    # original list
+    'a|an|and|as|at|but|by|en|for|if|in|of|on|or|the|to|v\.?|via|vs\.?'
+
+    # extras for city/place names
+    '|al|au|da|das|de|del|della|delle|des|di|do|dos|du|el|es|et|la|las|le|les|lez|los|na|nad|sous|sul|sur|under|upon|y'
+)
 PUNCT = r"""!"“#$%&'‘()*+,\-–‒—―./:;?@[\\\]_`{|}~"""
 
 SMALL_WORDS = re.compile(r'^(%s)$' % SMALL, re.I)
